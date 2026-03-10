@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Dashboard — 2026-03-09</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fb; --surface: #ffffff; --surface2: #eef0f7;
+    --border: #dde1f0; --text: #1e2235; --muted: #6b7591;
+    --accent: #4361ee; --green: #0d9488; --yellow: #c9860a;
+    --red: #dc2626; --blue: #0284c7;
+    --radius: 10px; --shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif;
+         font-size: 13px; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 14px 28px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
+  header span { color: var(--muted); font-size: 12px; }
+
+  /* ── LAYOUT ── */
+  .main { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* ── KPI CARDS ── */
+  .kpi-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi .value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+  .kpi .sub { color: var(--muted); font-size: 11px; }
+  .kpi.green .value { color: var(--green); }
+  .kpi.yellow .value { color: var(--yellow); }
+  .kpi.red .value { color: var(--red); }
+  .kpi.blue .value { color: var(--blue); }
+  .kpi-amt { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 2px; }
+  .kpi-divider { border: none; border-top: 1px solid var(--border); margin: 8px 0 5px; }
+  .kpi-vs { color: var(--muted); font-size: 10px; margin-bottom: 3px; }
+  .kpi-yoy { display: flex; flex-direction: column; gap: 2px; }
+  .kpi-yoy .yr { font-size: 11px; font-weight: 600; }
+  .kpi-yoy .yr.up { color: var(--green); }
+  .kpi-yoy .yr.down { color: var(--red); }
+  .kpi-yoy .yr.neutral { color: var(--muted); }
+  .kpi-yoy .ylbl { color: var(--muted); font-size: 10px; margin-right: 3px; }
+
+  /* ── CHARTS ROW ── */
+  .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+           border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--muted);
+              text-transform: uppercase; letter-spacing: .5px; margin-bottom: 16px; }
+
+  /* ── WEEKLY CHART ITEM SELECTOR ── */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip { padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border);
+           background: var(--surface2); color: var(--muted); cursor: pointer;
+           font-size: 11px; transition: all .15s; }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .chip:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+  /* ── TABLE ── */
+  .table-wrap { overflow-x: auto; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: center; }
+  .filter-row select, .filter-row input {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 10px; font-size: 12px; outline: none; }
+  .filter-row select:focus, .filter-row input:focus { border-color: var(--accent); }
+  .filter-row label { color: var(--muted); font-size: 11px; }
+  .tbl-info { color: var(--muted); font-size: 11px; margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: var(--surface2); color: var(--muted); padding: 9px 10px;
+              text-align: left; border-bottom: 1px solid var(--border);
+              cursor: pointer; white-space: nowrap; user-select: none; }
+  thead th:hover { color: var(--accent); }
+  thead th .sort-icon { opacity: .4; margin-left: 4px; }
+  thead th.asc .sort-icon::after { content: '▲'; }
+  thead th.desc .sort-icon::after { content: '▼'; }
+  thead th:not(.asc):not(.desc) .sort-icon::after { content: '⇅'; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 8px 10px; white-space: nowrap; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
+            font-size: 11px; font-weight: 600; }
+  .badge.reorder { background: rgba(201,134,10,.1);  color: var(--yellow); border: 1px solid rgba(201,134,10,.3); }
+  .badge.risk    { background: rgba(220,38,38,.08);  color: var(--red);    border: 1px solid rgba(220,38,38,.25); }
+  .badge.normal  { background: rgba(13,148,136,.08); color: var(--green);  border: 1px solid rgba(13,148,136,.2); }
+
+  .rate-bar { display: flex; align-items: center; gap: 6px; }
+  .rate-bar .bar { height: 6px; border-radius: 3px; flex-shrink: 0; transition: width .3s; }
+  .rate-bar .num { color: var(--text); min-width: 38px; }
+
+  /* ── PAGINATION ── */
+  .pagination { display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;
+                align-items: center; }
+  .page-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+              background: var(--surface2); color: var(--muted); cursor: pointer; font-size: 12px; }
+  .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .page-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+  .page-info { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sales Dashboard <span style="font-size:11px;background:#e8ecf8;padding:3px 8px;border-radius:4px;color:#4361ee;font-weight:600;vertical-align:middle">Snowflake DB 연동</span></h1>
+  <span>26S Season &nbsp;·&nbsp; 기준일 2026-03-09</span>
+</header>
+
+<div class="main">
+
+  <!-- KPI -->
+  <div class="kpi-row" style="grid-template-columns: repeat(4,1fr);">
+    <div class="kpi">
+      <div class="label">누계 입고 — 의류</div>
+      <div class="value">52,323</div>
+      <div class="kpi-amt">₩ 66.0억</div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-vs">vs 25SS 동기간 (52,323개)</div>
+      <div class="kpi-yoy">
+        <div><span class="ylbl">수량</span><span class="yr neutral">—</span></div>
+        <div><span class="ylbl">금액</span><span class="yr neutral">—</span></div>
+      </div>
+    </div>
+    <div class="kpi green">
+      <div class="label">누계 판매 — 의류</div>
+      <div class="value">1,931</div>
+      <div class="kpi-amt">₩ 2.3억</div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-vs">vs 25SS 동기간 (1,356개)</div>
+      <div class="kpi-yoy">
+        <div><span class="ylbl">수량</span><span class="yr up">▲ 42.4%</span></div>
+        <div><span class="ylbl">금액</span><span class="yr up">▲ 25.5%</span></div>
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="label">누계 입고 — ACC</div>
+      <div class="value">6,768</div>
+      <div class="kpi-amt">₩ 3.6억</div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-vs">vs 25SS 동기간 (6,768개)</div>
+      <div class="kpi-yoy">
+        <div><span class="ylbl">수량</span><span class="yr neutral">—</span></div>
+        <div><span class="ylbl">금액</span><span class="yr neutral">—</span></div>
+      </div>
+    </div>
+    <div class="kpi green">
+      <div class="label">누계 판매 — ACC</div>
+      <div class="value">131</div>
+      <div class="kpi-amt">₩ 589만</div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-vs">vs 25SS 동기간 (0개)</div>
+      <div class="kpi-yoy">
+        <div><span class="ylbl">수량</span><span class="yr neutral">—</span></div>
+        <div><span class="ylbl">금액</span><span class="yr neutral">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 시즌 전체 성과 분석 -->
+  <div class="card" style="margin-bottom:18px">
+    <h2>26SS 시즌 성과 분석 <span style="font-weight:400;font-size:12px;color:var(--muted)">vs 25SS 동기간 · 기준일 2026-03-09</span></h2>
+    <div id="seasonAnalysis"></div>
+  </div>
+
+  <!-- 차트 행 -->
+  <div class="charts-row">
+    <!-- ITEM별 판매금액 -->
+    <div class="card">
+      <h2>ITEM별 판매금액 &nbsp;<span style="font-weight:400;color:var(--accent)">■ 26SS</span>&nbsp;<span style="font-weight:400;color:#a29bfe">■ 25SS 동기간</span></h2>
+      <div class="chip-row" id="itemFilterRow">
+        <div class="chip active" data-cat="__all__">전체</div>
+        <div class="chip" data-cat="의류">의류</div>
+        <div class="chip" data-cat="ACC">ACC</div>
+      </div>
+      <canvas id="itemChart" height="180"></canvas>
+    </div>
+    <!-- 주차별 판매 추이 -->
+    <div class="card">
+      <h2>주차별 판매 전년대비 &nbsp;<span style="font-weight:400;font-size:11px;color:var(--muted)">━ 26SS &nbsp;&nbsp; ╌ 25SS 동기간</span></h2>
+      <div class="chip-row" id="weekFilterRow" style="margin-bottom:6px">
+        <div class="chip active" data-cat="__all__">전체</div>
+        <div class="chip" data-cat="의류">의류</div>
+        <div class="chip" data-cat="ACC">ACC</div>
+      </div>
+      <div class="chip-row" id="chipRow"></div>
+      <div style="color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">수량 기준</div>
+      <canvas id="weekChartQty" height="155"></canvas>
+      <div style="color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">금액 기준</div>
+      <canvas id="weekChartAmt" height="155"></canvas>
+    </div>
+  </div>
+
+  <!-- 카테고리별 판매 현황 -->
+  <div class="card">
+    <h2>카테고리별 판매 현황
+      <span style="font-weight:400;font-size:11px;color:var(--muted)">
+        &nbsp;·&nbsp; ▼▶ 클릭으로 펼침/접기 &nbsp;·&nbsp; 금주: 03-02 &nbsp;·&nbsp; 25SS 동기간 (01/05~03-10)
+      </span>
+    </h2>
+    <div class="table-wrap">
+      <table id="catTable" style="font-size:11.5px;min-width:1300px">
+        <thead>
+          <tr>
+            <th rowspan="2" style="min-width:140px;vertical-align:bottom">카테고리</th>
+            <th colspan="3" style="text-align:center;border-left:2px solid var(--border)">누계 판매수량</th>
+            <th colspan="3" style="text-align:center;border-left:2px solid var(--border)">누계 판매금액</th>
+            <th colspan="3" style="text-align:center;border-left:2px solid var(--border)">입고금액</th>
+            <th colspan="3" style="text-align:center;border-left:2px solid var(--border)">금주 판매수량</th>
+            <th colspan="3" style="text-align:center;border-left:2px solid var(--border)">금주 판매금액</th>
+            <th rowspan="2" style="text-align:center;border-left:2px solid var(--border);vertical-align:bottom">전주대비<br>신장율</th>
+            <th colspan="2" style="text-align:center;border-left:2px solid var(--border)">누적 판매율</th>
+          </tr>
+          <tr>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th><th>YoY</th>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th><th>YoY</th>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th><th>YoY</th>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th><th>YoY</th>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th><th>YoY</th>
+            <th style="border-left:2px solid var(--border)">26SS</th><th>25SS</th>
+          </tr>
+        </thead>
+        <tbody id="catBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 금주 판매 리뷰 -->
+  <div class="card">
+    <h2>금주 판매 리뷰 <span style="font-weight:400;font-size:12px;color:var(--muted)">W10 (2026-03-02)</span></h2>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="chip active" onclick="filterReview('all',this)">전체</button>
+      <button class="chip" onclick="filterReview('good',this)">GOOD POINT</button>
+      <button class="chip" onclick="filterReview('bad',this)">BAD POINT</button>
+    </div>
+    <div id="reviewGood"></div>
+    <div id="reviewBad" style="margin-top:18px"></div>
+  </div>
+
+  <!-- SKU 테이블 -->
+  <div class="card">
+    <h2>스타일별 전체 현황</h2>
+    <div class="filter-row">
+      <label>대분류</label>
+      <select id="f_cat1"><option value="">전체</option></select>
+      <label>중분류</label>
+      <select id="f_cat2"><option value="">전체</option></select>
+      <label>ITEM</label>
+      <select id="f_item"><option value="">전체</option></select>
+      <label>상태</label>
+      <select id="f_status">
+        <option value="">전체</option>
+        <option value="리오더 검토">리오더 검토</option>
+        <option value="재고 위험">재고 위험</option>
+        <option value="정상">정상</option>
+      </select>
+      <input id="f_search" type="text" placeholder="품번 / 제품명 검색..." style="min-width:180px">
+      <span class="tbl-info" id="tblInfo"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="skuTable">
+        <thead>
+          <tr>
+            <th data-col="대분류">대분류<span class="sort-icon"></span></th>
+            <th data-col="중분류">중분류<span class="sort-icon"></span></th>
+            <th data-col="ITEM">ITEM<span class="sort-icon"></span></th>
+            <th data-col="품번">품번<span class="sort-icon"></span></th>
+            <th data-col="제품명">제품명<span class="sort-icon"></span></th>
+            <th data-col="입고수량">입고수량<span class="sort-icon"></span></th>
+            <th data-col="누적판매수량">누계판매<span class="sort-icon"></span></th>
+            <th data-col="금주판매수량">금주판매<span class="sort-icon"></span></th>
+            <th data-col="판매율(%)">판매율<span class="sort-icon"></span></th>
+            <th data-col="재고수량">재고<span class="sort-icon"></span></th>
+            <th data-col="상태">상태<span class="sort-icon"></span></th>
+          </tr>
+        </thead>
+        <tbody id="skuBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+</div>
+
+<script>
+// ── 시즌 전체 성과 분석 ──────────────────────────────────────
+const SEASON_ANALYSIS = [{"type": "good", "title": "26SS 누계 판매금액 ₩ 2.4억, 전년 동기 대비 +28.7% 성장", "bullets": ["26SS 2,062개 판매(₩ 2.4억), 25SS 동기 1,356개(₩ 1.9억) 대비 수량 +52.1% 성장", "금주(W10) 357개(₩ 4,335만) 판매, 전주 대비 +19.0% 성장으로 시즌 상승세 지속", "입고 59,091개 대비 판매율 4.1%, 시즌 10주차 기준 정상 소진 궤도", "의류 ₩ 2.3억(비중 97.6%), ACC ₩ 589만(비중 2.4%)"]}, {"type": "good", "title": "Inner 카테고리 매출 +105% 폭발적 성장, 시즌 매출 견인", "bullets": ["Inner 매출 ₩ 1.2억(비중 47.8%)로 전년 ₩ 5,611만 대비 2배 이상 확대", "PQ(폴로) ₩ 3,327만 — 전년 대비 +110% 성장, SKU 25개로 라인업 대폭 확장", "MT(맨투맨) ₩ 2,427만 — 판매율 13.7%로 전 아이템 중 최고 소진율, 리오더 검토 필요", "HD(후드티) ₩ 2,220만 — +474% 성장, 판매율 15.4%로 시즌 초반 집중 소진"]}, {"type": "good", "title": "SK(스커트) ₩ 6,412만, 비중 26.6%로 절대 매출 1위 유지", "bullets": ["SK 누계 490개 판매, 판매율 5.1%로 전 아이템 중 2위 소진율 — 안정적 볼륨 유지", "SP(반바지) +73% 성장(₩ 2,249만), 남녀 쇼츠 수요 동반 확대로 Bottom 성장 견인", "PT(팬츠) +32% 성장(₩ 1,756만), W 와이드팬츠·부츠컷 중심 판매 호조", "Bottom 전체 ₩ 1.1억(비중 43.9%), 전년 대비 +4.6% 소폭 성장"]}, {"type": "good", "title": "금주 W10 전체 +19.0% WoW 성장, PT +100% 최고 성장", "bullets": ["금주 357개 판매로 전주 300개 대비 +19.0% 성장, 3월 시즌 본격 진입", "PT(팬츠) 34개(+100% WoW), 시즌 피크 진입", "SK(스커트) 95개(+61% WoW), 시즌 피크 진입", "SP(반바지) 59개(+18% WoW), 성장세 지속"]}, {"type": "risk", "title": "SK(스커트) 전년 동기 대비 -13.1% 역신장, 비중 하락 모니터링 필요", "bullets": ["25SS 동기 511개 → 26SS 490개로 수량 감소, 매출 ₩ 6,412만 vs ₩ 7,380만", "타키니 플라잉 시리즈(SK10961) 누계 1개 SKU가 매출 견인하나, 25SS 동일 모델 대비 판매 속도 둔화", "판매율 5.1%로 양호하나, 입고 9,017개 대비 시즌 후반 재고 소진 전략 필요", "금주 95개(+61% WoW)로 반등 시그널 확인, 3월 본격 시즌 진입 시 회복 가능성"]}, {"type": "risk", "title": "Outer 카테고리 전년 대비 -50% 급감, WJ 판매 부진", "bullets": ["Outer 매출 ₩ 1,359만, 전년 ₩ 2,724만 대비 반토막 수준", "WJ(방풍자켓) ₩ 901만 — 전년 대비 -66.9%, 판매율 1.1%로 재고 소진 부진", "WJ 입고 4,469개 중 45개 판매, 재고 4,424개 적체 — 프로모션 검토 필요", "3월 환절기 아우터 수요 시점, 금주 18개(+64% WoW)로 회복 흐름 주시"]}, {"type": "risk", "title": "RS(반팔티) 입고 7,527개 대비 판매율 1.8%, 대량 재고 소진 전략 필요", "bullets": ["RS 입고 7,527개로 전 아이템 중 최대 물량이나, 누계 147개 판매에 그침", "SKU 24개로 라인업 과다 — 스타일당 평균 판매 6.1개, 효율성 저하", "전년 대비 +36% 성장 중이나 4월 이후 본격 시즌 대비 판매 가속 필요", "WHS(화이트) 컬러 중심 판매 집중, 컬러 다양성 확보 및 코디 제안 강화 권장"]}, {"type": "risk", "title": "ACC(Headwear) 입고 2,633개 대비 판매율 4.4%, 과잉 재고 리스크", "bullets": ["CP(운동모) 슈퍼매치 에디션 1,500개 + MC 스태프 캡 659개 = 총 2,633개 대량 입고", "누계 131개 판매(₩ 589만), 재고 2,502개 — 시즌 소진 계획 재점검 필요", "25SS 동기 ACC 비교 데이터 없어 YoY 분석 불가, 시즌 판매 추이 모니터링 강화", "대회·이벤트 연계 판매, 온라인 기획전 등 추가 소진 채널 확보 권장"]}];
+(function() {
+  const sec = document.getElementById('seasonAnalysis');
+  const goodItems = SEASON_ANALYSIS.filter(r => r.type === 'good');
+  const riskItems = SEASON_ANALYSIS.filter(r => r.type === 'risk');
+
+  function renderGroup(items, label, icon, bgColor, borderColor, textColor) {
+    if (!items.length) return '';
+    const header = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;margin-top:20px">
+      <span style="background:${bgColor};color:${textColor};font-size:13px;font-weight:700;padding:5px 14px;border-radius:6px;letter-spacing:.5px">${label}</span>
+    </div>`;
+    const cards = items.map(r => {
+      const bullets = r.bullets.map(b => `<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+        <span style="color:${borderColor};font-size:9px;margin-top:5px;flex-shrink:0">●</span>
+        <span style="font-size:12.5px;color:#2d3436;line-height:1.7">${b}</span>
+      </div>`).join('');
+      return `<div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:18px 20px;border-left:4px solid ${borderColor};box-shadow:0 1px 6px rgba(0,0,0,.04)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:14px;color:${borderColor};font-weight:700">${icon}</span>
+          <span style="font-size:13.5px;font-weight:700;color:#1e2235;line-height:1.5">${r.title}</span>
+        </div>
+        ${bullets}
+      </div>`;
+    }).join('');
+    return header + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:14px">${cards}</div>`;
+  }
+
+  sec.innerHTML =
+    renderGroup(goodItems, '성과 인사이트', '✓', '#e6f9f0', '#00b894', '#00805a') +
+    renderGroup(riskItems, '위험 요소', '!', '#ffeaea', '#e17055', '#c0392b');
+})();
+
+// ── 금주 판매 리뷰 ──────────────────────────────────────────
+const REVIEW_ITEMS = [{"type": "good", "item": "SK", "item_nm": "스커트", "cat1": "의류", "cat2": "Bottom", "wk_qty": 95, "pw_qty": 59, "wk_amt": 13375000, "wk25_qty": 99, "share": 26.6, "points": ["전주 대비 +61% 성장 (59→95개)", "금주 전체 판매의 26.6% 차지 — 핵심 볼륨 아이템", "W 타키니 플라잉 스커트 42개 — 컬러: INL(16), OWS(8), PKS(7)", "W 타키니 플라잉 잔플리츠 스커트 13개 — 컬러: INP(7), YEP(3), NYS(2)", "W 타키니 플라잉 백플리츠 스커트 11개 — 컬러: NYS(6), PKS(4), WHS(1)", "사이즈: S 42개(44%), M 26개(27%), XS 15개(16%)", "온/오프 균형: 온라인 51개(54%) / 오프라인 44개(46%)"]}, {"type": "good", "item": "SP", "item_nm": "반바지", "cat1": "의류", "cat2": "Bottom", "wk_qty": 59, "pw_qty": 50, "wk_amt": 5701000, "wk25_qty": 21, "share": 16.5, "points": ["전주 대비 +18% 성장 (50→59개)", "전년 동기 대비 +181% (21→59개)", "금주 전체 판매의 16.5% 차지 — 핵심 볼륨 아이템", "M 에센셜 7인치 쇼츠 10개 — 컬러: BKS(4), NYS(3), WHS(2)", "W 쿠쉬라이트 프렌치 스커티 쇼츠 8개 — 컬러: NYS(7), CRM(1)", "M 쿠쉬라이트 프렌치 쇼츠 8개 — 컬러: MGS(4), NYS(4)", "사이즈: M 23개(39%), L 13개(22%), S 12개(20%)", "오프라인 비중 78% (46/59개) — 매장 체험 판매 강세"]}, {"type": "good", "item": "PQ", "item_nm": "폴로 티셔츠", "cat1": "의류", "cat2": "Inner", "wk_qty": 51, "pw_qty": 46, "wk_amt": 6219000, "wk25_qty": 36, "share": 14.3, "points": ["전주 대비 +11% 성장 (46→51개)", "전년 동기 대비 +42% (36→51개)", "금주 전체 판매의 14.3% 차지 — 핵심 볼륨 아이템", "W 플레잉 폴로 12개 — 컬러: PKS(6), INL(3), PKP(2)", "M 플레잉 폴로 8개 — 컬러: BKS(3), NYS(2), WHS(2)", "M 지퍼넥 폴로 8개 — 컬러: NYS(3), GNS(3), WHS(2)", "사이즈: M 17개(33%), S 14개(27%), L 12개(24%)", "오프라인 비중 82% (42/51개) — 매장 체험 판매 강세"]}, {"type": "good", "item": "RS", "item_nm": "반팔티셔츠", "cat1": "의류", "cat2": "Inner", "wk_qty": 42, "pw_qty": 40, "wk_amt": 3078000, "wk25_qty": 29, "share": 11.8, "points": ["전년 동기 대비 +45% (29→42개)", "금주 전체 판매의 11.8% 차지 — 핵심 볼륨 아이템", "U 클래식 그래픽 반팔 티셔츠 8개 — 컬러: WHS(6), NYS(2)", "W 쿨매치 반팔 티셔츠 7개 — 컬러: WHS(6), INL(1)", "W 클래식 그래픽 미니 티셔츠 6개 — 컬러: WHS(4), NYS(2)", "사이즈: S 15개(36%), M 14개(33%), L 9개(21%)", "오프라인 비중 63% (27/43개) — 매장 체험 판매 강세"]}, {"type": "good", "item": "PT", "item_nm": "팬츠", "cat1": "의류", "cat2": "Bottom", "wk_qty": 34, "pw_qty": 17, "wk_amt": 3926000, "wk25_qty": 18, "share": 9.5, "points": ["전주 대비 +100% 성장 (17→34개)", "전년 동기 대비 +89% (18→34개)", "금주 전체 판매의 9.5% 차지 — 핵심 볼륨 아이템", "W 쿠쉬라이트 프렌치 와이드 팬츠 18개 — 컬러: BKS(12), MGS(6)", "W 쿠쉬라이트 부츠컷 팬츠 11개 — 컬러: BKS(7), INL(4)", "W 프렌치 테리 조거팬츠 3개 — 컬러: BRD(3)", "사이즈: S 18개(53%), M 10개(29%), L 6개(18%)", "온라인 비중 65% (22/34개) — 온라인 중심 판매"]}, {"type": "good", "item": "MT", "item_nm": "맨투맨", "cat1": "의류", "cat2": "Inner", "wk_qty": 20, "pw_qty": 31, "wk_amt": 2320000, "wk25_qty": 7, "share": 5.6, "points": ["전년 동기 대비 +186% (7→20개)", "U 쿠쉬라이트 프렌치 클래식 맨투맨 7개 — 컬러: CRM(4), NYS(3)", "W 쿠쉬라이트 그래픽 맨투맨 6개 — 컬러: WHS(4), MGS(2)", "M 쿠쉬라이트 프렌치 반팔 맨투맨 4개 — 컬러: MGS(4)", "사이즈: S 10개(50%), XL 6개(30%), M 2개(10%)", "온/오프 균형: 온라인 10개(50%) / 오프라인 10개(50%)"]}, {"type": "good", "item": "WJ", "item_nm": "방풍자켓", "cat1": "의류", "cat2": "Outer", "wk_qty": 18, "pw_qty": 11, "wk_amt": 3492000, "wk25_qty": 22, "share": 5.0, "points": ["전주 대비 +64% 성장 (11→18개)", "U 프레쉬닷 윈드브레이커 6개 — 컬러: BKS(4), BRS(2)", "W 쿠쉬라이트 경량 우븐 크롭 자켓 4개 — 컬러: BKS(3), INL(1)", "U 라이트 스트레치 바시티 자켓 3개 — 컬러: BKS(2), BGD(1)", "사이즈: M 8개(44%), S 6개(33%), XS 2개(11%)", "온라인 비중 61% (11/18개) — 온라인 중심 판매"], "bad_points": ["전년 동기 대비 -18% 역신장 (25SS 22개 → 26SS 18개)", "부진 컬러 — WHS: 25SS 9개→26SS 3개, GND: 25SS 6개→26SS 0개", "25SS 히트 스타일 WJ20251 (9개) — 26SS 후속 모델 모니터링 필요", "채널 변화: 오프라인 비중 25SS 95%→26SS 39%"]}, {"type": "good", "item": "TR", "item_nm": "트레이닝(상의)", "cat1": "의류", "cat2": "Inner", "wk_qty": 14, "pw_qty": 30, "wk_amt": 2246000, "wk25_qty": 11, "share": 3.9, "points": ["전년 동기 대비 +27% (11→14개)", "W 쿠쉬라이트 트랙탑 7개 — 컬러: WHS(3), INL(2), BKS(1)", "W 쿠쉬라이트 프렌치 크롭 후드 집업 2개 — 컬러: MGS(2)", "M 쿠쉬라이트 프렌치 후드집업 2개 — 컬러: MGS(2)", "사이즈: S 5개(36%), L 4개(29%), M 3개(21%)", "오프라인 비중 64% (9/14개) — 매장 체험 판매 강세"]}, {"type": "bad", "item": "KU", "item_nm": "니트반팔티셔츠", "cat1": "의류", "cat2": "Inner", "wk_qty": 1, "pw_qty": 0, "wk_amt": 169000, "wk25_qty": 5, "share": 0.3, "points": ["전년 동기 대비 -80% 역신장 (25SS 5개 → 26SS 1개)"]}, {"type": "bad", "item": "BR", "item_nm": "브라", "cat1": "의류", "cat2": "Wear_etc", "wk_qty": 4, "pw_qty": 0, "wk_amt": 356000, "wk25_qty": 7, "share": 1.1, "points": ["전년 동기 대비 -43% 역신장 (25SS 7개 → 26SS 4개)", "부진 컬러 — INS: 25SS 2개→26SS 0개, MGL: 25SS 2개→26SS 0개, BGD: 25SS 1개→26SS 0개", "25SS 히트 스타일 BR15151 (4개) — 26SS 후속 모델 모니터링 필요"]}, {"type": "bad", "item": "HD", "item_nm": "후드티", "cat1": "의류", "cat2": "Inner", "wk_qty": 6, "pw_qty": 6, "wk_amt": 865000, "wk25_qty": 8, "share": 1.7, "points": ["전년 동기 대비 -25% 역신장 (25SS 8개 → 26SS 6개)", "부진 컬러 — WHS: 25SS 9개→26SS 0개", "25SS 히트 스타일 HD15151 (8개) — 26SS 후속 모델 모니터링 필요"]}];
+let reviewFilter = 'all';
+function filterReview(mode, btn) {
+  reviewFilter = mode;
+  btn.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  renderReview();
+}
+function fmtAmt(n) {
+  if (Math.abs(n) >= 1e8) return (n/1e8).toFixed(1) + '억';
+  if (Math.abs(n) >= 1e4) return Math.round(n/1e4).toLocaleString() + '만';
+  return n.toLocaleString();
+}
+function renderReview() {
+  const goodSec = document.getElementById('reviewGood');
+  const badSec  = document.getElementById('reviewBad');
+  const goodItems = REVIEW_ITEMS.filter(r => r.type === 'good');
+  const badItems  = REVIEW_ITEMS.filter(r => r.type === 'bad');
+  const showGood = reviewFilter === 'all' || reviewFilter === 'good';
+  const showBad  = reviewFilter === 'all' || reviewFilter === 'bad';
+
+  function pointHtml(pts, icon, color) {
+    return pts.map(p => `<div style="display:flex;gap:7px;align-items:flex-start;margin-bottom:5px">
+      <span style="color:${color};font-size:11px;flex-shrink:0;margin-top:2px">${icon}</span>
+      <span style="font-size:12.5px;color:#1e2235;line-height:1.6">${p}</span></div>`).join('');
+  }
+  function cardHtml(r, borderColor) {
+    const wow = r.pw_qty > 0 ? Math.round((r.wk_qty - r.pw_qty)/r.pw_qty*100) : null;
+    const wowStr = wow !== null ? `<span style="color:${wow>=0?'#00b894':'#e17055'};font-size:11px;margin-left:4px">${wow>=0?'+':''}${wow}% WoW</span>` : '';
+    const yoyStr = r.wk25_qty > 0 ? `<span style="font-size:10px;color:var(--muted);margin-left:6px">25SS ${r.wk25_qty}개</span>` : '';
+    const goodPts = r.points ? pointHtml(r.points, '&#9650;', '#00b894') : '';
+    const badPts  = r.bad_points ? '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #eee">' + pointHtml(r.bad_points, '&#9660;', '#e17055') + '</div>' : '';
+    const badOnlyPts = r.type === 'bad' ? pointHtml(r.points, '&#9660;', '#e17055') : '';
+    return `<div style="background:#fff;border:1px solid #dde1f0;border-radius:10px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.05);border-left:4px solid ${borderColor}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <span style="font-weight:700;font-size:15px;color:var(--accent)">${r.item}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">${r.item_nm}</span>
+          <span style="font-size:10px;background:#f1f2f6;padding:2px 6px;border-radius:3px;margin-left:6px;color:#636e72">${r.cat2}</span>
+        </div>
+        <div style="text-align:right">
+          <span style="font-weight:700;font-size:14px;color:#1e2235">${r.wk_qty}개</span>${wowStr}
+          <div style="font-size:10px;color:var(--muted)">${fmtAmt(r.wk_amt)}원 · 구성비 ${r.share}%${yoyStr}</div>
+        </div>
+      </div>
+      ${r.type==='good' ? goodPts : ''}
+      ${r.type==='bad' ? badOnlyPts : ''}
+      ${badPts}
+    </div>`;
+  }
+
+  if (showGood) {
+    goodSec.style.display = '';
+    goodSec.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="background:#00b894;color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:5px">GOOD POINT</span>
+      <span style="font-size:12px;color:var(--muted)">금주 판매 상위 아이템 · 컬러/사이즈/채널 분석</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px">
+      ${goodItems.map(r => cardHtml(r, '#00b894')).join('')}
+    </div>`;
+  } else {
+    goodSec.style.display = 'none';
+  }
+
+  if (showBad) {
+    badSec.style.display = '';
+    badSec.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="background:#e17055;color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:5px">BAD POINT</span>
+      <span style="font-size:12px;color:var(--muted)">전년 동기 대비 역신장 아이템 · 부진 요인 분석</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px">
+      ${badItems.map(r => cardHtml(r, '#e17055')).join('')}
+    </div>`;
+  } else {
+    badSec.style.display = 'none';
+  }
+}
+renderReview();
+
+// ── DATA ──────────────────────────────────────────────────────
+const ITEM_LABELS   = ["SK", "PQ", "MT", "SP", "HD", "TR", "PT", "RS", "WJ", "CP", "JP", "KP", "LG", "KV", "RL", "BR", "KC", "KU", "OP", "PR", "SL", "SO", "TW", "WS", "WT"];
+const ITEM_AMOUNT   = [64120000, 33276000, 24272000, 22495000, 22209000, 19969000, 17561000, 10513000, 9015000, 5895000, 4403000, 2685000, 1533000, 1112000, 891000, 356000, 179000, 169000, 0, 0, 0, 0, 0, 0, 0];
+const ITEM_AMOUNT25 = [73809000, 15850000, 13338000, 12977000, 3870000, 12664000, 13323000, 7751000, 27243000, 0, 0, 0, 939000, 0, 356000, 2492000, 0, 2283000, 0, 0, 99000, 0, 0, 0, 0];
+const ITEM_RATES    = [5.1, 2.3, 13.7, 2.8, 15.4, 8.1, 13.2, 1.8, 1.1, 4.4, 5.2, 48.8, 3.3, 1.8, 4.4, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.9];
+const ITEM_RECEIPT  = [9017, 11918, 1561, 8126, 1154, 2206, 1589, 7527, 4469, 2633, 324, 297, 554, 455, 205, 493, 254, 1810, 0, 200, 0, 935, 3000, 150, 214];
+const ITEM_SALES    = [490, 274, 208, 245, 180, 121, 149, 147, 45, 131, 17, 15, 17, 8, 9, 4, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+const WEEK_LABELS        = ["12-29", "01-05", "01-12", "01-19", "01-26", "02-02", "02-09", "02-16", "02-23", "03-02", "03-09"];
+const WEEK_LABELS_25     = ["12-30", "01-06", "01-13", "01-20", "01-27", "02-03", "02-10", "02-17", "02-24", "03-03", "03-10"];
+const WEEK_TOTAL         = [11, 20, 158, 197, 287, 182, 258, 288, 300, 357, 4];
+const WEEK_TOTAL_AMT     = [1413000, 2351000, 15196000, 20370000, 35112000, 20831000, 32296000, 33708000, 35616000, 43354000, 406000];
+const WEEK_TOTAL_25      = [-2, 4, 7, 28, 43, 110, 161, 157, 137, 263, 448];
+const WEEK_TOTAL_25_AMT  = [-278000, 556000, 1013000, 4212000, 6447000, 16150000, 23249000, 22853000, 18643000, 36117000, 58032000];
+const ITEM_WEEKLY        = {"SK": [0, 1, 3, 38, 111, 36, 64, 83, 59, 95, 0], "PQ": [0, 4, 4, 46, 45, 18, 26, 33, 46, 51, 1], "MT": [0, 0, 0, 0, 8, 43, 53, 52, 31, 20, 1], "SP": [0, 0, 0, 17, 20, 23, 27, 48, 50, 59, 1], "HD": [2, 3, 88, 35, 23, 3, 6, 9, 6, 6, -1], "TR": [1, 3, 0, 2, 27, 11, 21, 11, 30, 14, 1], "PT": [2, 4, 10, 9, 11, 19, 25, 18, 17, 34, 0], "RS": [0, 0, 0, 1, 10, 20, 14, 19, 40, 42, 1], "WJ": [0, 0, 0, 0, 0, 1, 7, 8, 11, 18, 0], "CP": [2, 3, 51, 47, 26, -1, 0, 2, 1, 0, 0], "JP": [0, 0, 0, 1, 2, 3, 6, -1, 3, 3, 0], "KP": [4, 2, 2, 1, 3, 1, 1, 1, 0, 0, 0], "LG": [0, 0, 0, 0, 0, 2, 4, 2, 1, 8, 0], "KV": [0, 0, 0, 0, 1, 2, 1, 1, 2, 1, 0], "RL": [0, 0, 0, 0, 0, 0, 3, 2, 3, 1, 0], "BR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0], "KC": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "KU": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0], "OP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "PR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SL": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SO": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "TW": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WS": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WT": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const ITEM_WEEKLY_AMT    = {"SK": [0, 139000, 417000, 5282000, 15329000, 3824000, 8006000, 10577000, 7171000, 13375000, 0], "PQ": [0, 476000, 476000, 5474000, 5355000, 2142000, 3094000, 4077000, 5824000, 6219000, 139000], "MT": [0, 0, 0, 0, 952000, 5057000, 6217000, 5948000, 3669000, 2320000, 109000], "SP": [0, 0, 0, 1513000, 1760000, 2027000, 2383000, 4392000, 4630000, 5701000, 89000], "HD": [240000, 360000, 10560000, 4200000, 2760000, 476000, 778000, 1225000, 894000, 865000, -149000], "TR": [149000, 447000, 0, 298000, 4503000, 1819000, 3569000, 1779000, 5010000, 2246000, 149000], "PT": [218000, 436000, 1090000, 981000, 1399000, 2281000, 3085000, 2162000, 1983000, 3926000, 0], "RS": [0, 0, 0, 69000, 690000, 1380000, 966000, 1311000, 2950000, 3078000, 69000], "WJ": [0, 0, 0, 0, 0, 239000, 1593000, 1672000, 2019000, 3492000, 0], "CP": [90000, 135000, 2295000, 2115000, 1170000, -45000, 0, 90000, 45000, 0, 0], "JP": [0, 0, 0, 259000, 518000, 777000, 1554000, -259000, 777000, 777000, 0], "KP": [716000, 358000, 358000, 179000, 537000, 179000, 179000, 179000, 0, 0, 0], "LG": [0, 0, 0, 0, 0, 218000, 436000, 218000, 69000, 592000, 0], "KV": [0, 0, 0, 0, 139000, 278000, 139000, 139000, 278000, 139000, 0], "RL": [0, 0, 0, 0, 0, 0, 297000, 198000, 297000, 99000, 0], "BR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 356000, 0], "KC": [0, 0, 0, 0, 0, 179000, 0, 0, 0, 0, 0], "KU": [0, 0, 0, 0, 0, 0, 0, 0, 0, 169000, 0], "OP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "PR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SL": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SO": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "TW": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WS": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WT": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const ITEM_WEEKLY_25     = {"SK": [0, 0, 2, 3, 3, 70, 73, 57, 42, 99, 162], "PQ": [0, 0, 0, 0, 0, 3, 26, 13, 8, 36, 44], "MT": [-2, 4, 5, 4, 8, 7, 13, 12, 19, 7, 25], "SP": [0, 0, 0, 6, 11, 9, 10, 16, 11, 21, 49], "HD": [0, 0, 0, 0, 0, 0, 0, 7, 3, 8, 12], "TR": [0, 0, 0, 3, 7, 7, 14, 13, 12, 11, 9], "PT": [0, 0, 0, 8, 7, 4, 8, 12, 18, 18, 22], "RS": [0, 0, 0, 0, 0, 0, 0, 0, 11, 29, 59], "WJ": [0, 0, 0, 4, 7, 10, 15, 19, 8, 22, 32], "CP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "JP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "KP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "LG": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11], "KV": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "RL": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 3], "BR": [0, 0, 0, 0, 0, 0, 2, 6, 2, 7, 11], "KC": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "KU": [0, 0, 0, 0, 0, 0, 0, 2, 2, 5, 8], "OP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "PR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SL": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "SO": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "TW": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WS": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WT": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const ITEM_WEEKLY_25_AMT = {"SK": [0, 0, 318000, 477000, 477000, 9850000, 10287000, 8103000, 6098000, 14641000, 23558000], "PQ": [0, 0, 0, 0, 0, 357000, 3094000, 1547000, 992000, 4464000, 5396000], "MT": [-278000, 556000, 695000, 556000, 1112000, 973000, 1687000, 1638000, 2311000, 853000, 3235000], "SP": [0, 0, 0, 574000, 999000, 821000, 930000, 1504000, 1079000, 1959000, 5111000], "HD": [0, 0, 0, 0, 0, 0, 0, 903000, 387000, 1032000, 1548000], "TR": [0, 0, 0, 507000, 1183000, 1183000, 2316000, 2137000, 1988000, 1849000, 1501000], "PT": [0, 0, 0, 1112000, 973000, 556000, 1112000, 1588000, 2422000, 2462000, 3098000], "RS": [0, 0, 0, 0, 0, 0, 0, 0, 879000, 2291000, 4581000], "WJ": [0, 0, 0, 986000, 1703000, 2410000, 3645000, 4641000, 1962000, 5298000, 6598000], "CP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "JP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "KP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "LG": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 939000], "KV": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "RL": [0, 0, 0, 0, 0, 0, 0, 0, 89000, 0, 267000], "BR": [0, 0, 0, 0, 0, 0, 178000, 534000, 178000, 623000, 979000], "KC": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "KU": [0, 0, 0, 0, 0, 0, 0, 258000, 258000, 645000, 1122000], "OP": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "PR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "SL": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99000], "SO": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "TW": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WS": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WT": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const ITEM_CAT1    = ["의류", "의류", "의류", "의류", "의류", "의류", "의류", "의류", "의류", "ACC", "의류", "의류", "의류", "의류", "의류", "의류", "의류", "의류", "의류", "ACC", "의류", "ACC", "ACC", "의류", "의류"];
+const CAT1_WEEKLY        = {"의류": [9, 17, 107, 150, 261, 183, 258, 286, 299, 357, 4], "ACC": [2, 3, 51, 47, 26, -1, 0, 2, 1, 0, 0]};
+const CAT1_WEEKLY_AMT    = {"의류": [1323000, 2216000, 12901000, 18255000, 33942000, 20876000, 32296000, 33618000, 35571000, 43354000, 406000], "ACC": [90000, 135000, 2295000, 2115000, 1170000, -45000, 0, 90000, 45000, 0, 0]};
+const CAT1_WEEKLY_25     = {"의류": [-2, 4, 7, 28, 43, 110, 161, 157, 137, 263, 448], "ACC": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const CAT1_WEEKLY_25_AMT = {"의류": [-278000, 556000, 1013000, 4212000, 6447000, 16150000, 23249000, 22853000, 18643000, 36117000, 58032000], "ACC": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]};
+const TABLE_DATA   = [{"대분류": "ACC", "중분류": "Headwear", "ITEM": "CP", "품번": "ST26STXCP01061", "제품명": "U 슈퍼매치 에디션 볼캡", "입고수량": 1500, "누적판매수량": 137, "금주판매수량": 0, "판매율(%)": 9.1, "재고수량": 763, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "HD", "품번": "ST26STXHD01061", "제품명": "U 슈퍼매치 에디션 후디", "입고수량": 301, "누적판매수량": 75, "금주판매수량": 1, "판매율(%)": 24.9, "재고수량": 73, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KP", "품번": "ST26STWKP30161", "제품명": "W 케이블 폴로 스웨터", "입고수량": 93, "누적판매수량": 52, "금주판매수량": 0, "판매율(%)": 55.9, "재고수량": 46, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STWPT16061", "제품명": "W 프렌치 테리 조거팬츠", "입고수량": 89, "누적판매수량": 32, "금주판매수량": 3, "판매율(%)": 36.0, "재고수량": 58, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "MT", "품번": "ST26STWMT10161", "제품명": "W 쿠쉬라이트 프렌치 보트넥 맨투맨", "입고수량": 75, "누적판매수량": 30, "금주판매수량": 2, "판매율(%)": 40.0, "재고수량": 66, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STWTR10261", "제품명": "W 쿠쉬라이트 트랙탑", "입고수량": 54, "누적판매수량": 28, "금주판매수량": 6, "판매율(%)": 51.9, "재고수량": 43, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK10261", "제품명": "W 쿠쉬라이트 스커트", "입고수량": 68, "누적판매수량": 28, "금주판매수량": 8, "판매율(%)": 41.2, "재고수량": 58, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP10161", "제품명": "W 쿠쉬라이트 프렌치 스커티 쇼츠", "입고수량": 68, "누적판매수량": 27, "금주판매수량": 8, "판매율(%)": 39.7, "재고수량": 60, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STWPT10261", "제품명": "W 쿠쉬라이트 부츠컷 팬츠", "입고수량": 92, "누적판매수량": 20, "금주판매수량": 11, "판매율(%)": 21.7, "재고수량": 80, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STWTR16061", "제품명": "W 프렌치 테리 후드집업", "입고수량": 73, "누적판매수량": 20, "금주판매수량": 2, "판매율(%)": 27.4, "재고수량": 58, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK11061", "제품명": "W 타키니 플라잉 잔플리츠 스커트", "입고수량": 138, "누적판매수량": 16, "금주판매수량": 13, "판매율(%)": 11.6, "재고수량": 132, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STMPT16061", "제품명": "M 쿠쉬라이트 프렌치 조거팬츠", "입고수량": 67, "누적판매수량": 15, "금주판매수량": 2, "판매율(%)": 22.4, "재고수량": 57, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK10961", "제품명": "W 타키니 플라잉 스커트", "입고수량": 317, "누적판매수량": 15, "금주판매수량": 42, "판매율(%)": 4.7, "재고수량": 309, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STWPT10761", "제품명": "W 쿠쉬라이트 프렌치 와이드 팬츠", "입고수량": 53, "누적판매수량": 14, "금주판매수량": 18, "판매율(%)": 26.4, "재고수량": 48, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "MT", "품번": "ST26STWMT10261", "제품명": "W 쿠쉬라이트 그래픽 맨투맨", "입고수량": 71, "누적판매수량": 14, "금주판매수량": 6, "판매율(%)": 19.7, "재고수량": 57, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ10961", "제품명": "W 플레잉 폴로", "입고수량": 148, "누적판매수량": 11, "금주판매수량": 12, "판매율(%)": 7.4, "재고수량": 139, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STMTR16061", "제품명": "M 쿠쉬라이트 프렌치 후드집업", "입고수량": 61, "누적판매수량": 11, "금주판매수량": 2, "판매율(%)": 18.0, "재고수량": 56, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK20361", "제품명": "W 스트링 클래식 스커트", "입고수량": 72, "누적판매수량": 11, "금주판매수량": 7, "판매율(%)": 15.3, "재고수량": 70, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "MT", "품번": "ST26STXMT10161", "제품명": "U 쿠쉬라이트 프렌치 클래식 맨투맨", "입고수량": 47, "누적판매수량": 11, "금주판매수량": 7, "판매율(%)": 23.4, "재고수량": 39, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK20261", "제품명": "W 클래식 와이드 플리츠 스커트", "입고수량": 112, "누적판매수량": 10, "금주판매수량": 9, "판매율(%)": 8.9, "재고수량": 105, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STMSP20261", "제품명": "M 에센셜 7인치 쇼츠", "입고수량": 178, "누적판매수량": 8, "금주판매수량": 10, "판매율(%)": 4.5, "재고수량": 176, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STXRS10261", "제품명": "U 클래식 그래픽 반팔 티셔츠", "입고수량": 56, "누적판매수량": 8, "금주판매수량": 8, "판매율(%)": 14.3, "재고수량": 49, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10463", "제품명": "W 쿨매치 링거티", "입고수량": 80, "누적판매수량": 8, "금주판매수량": 4, "판매율(%)": 10.0, "재고수량": 74, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK22161", "제품명": "W 타키니 플라잉 백플리츠 스커트", "입고수량": 259, "누적판매수량": 8, "금주판매수량": 11, "판매율(%)": 3.1, "재고수량": 252, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "HD", "품번": "ST26STXHD10261", "제품명": "U 쿠쉬라이트 로고 후디", "입고수량": 33, "누적판매수량": 7, "금주판매수량": 5, "판매율(%)": 21.2, "재고수량": 32, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "LG", "품번": "ST26STWLG10361", "제품명": "W 마시멜로우 부츠컷 레깅스", "입고수량": 67, "누적판매수량": 7, "금주판매수량": 1, "판매율(%)": 10.4, "재고수량": 63, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS15361", "제품명": "W 쿨매치 반팔 티셔츠", "입고수량": 149, "누적판매수량": 7, "금주판매수량": 7, "판매율(%)": 4.7, "재고수량": 144, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ26161", "제품명": "W 돌먼 우븐 폴로", "입고수량": 90, "누적판매수량": 6, "금주판매수량": 3, "판매율(%)": 6.7, "재고수량": 86, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10761", "제품명": "W 크롭 소프트 슬림 티셔츠", "입고수량": 68, "누적판매수량": 6, "금주판매수량": 6, "판매율(%)": 8.8, "재고수량": 65, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STMPT10261", "제품명": "M 쿠쉬라이트 트랙팬츠", "입고수량": 48, "누적판매수량": 6, "금주판매수량": 0, "판매율(%)": 12.5, "재고수량": 44, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STMSP10161", "제품명": "M 쿠쉬라이트 프렌치 쇼츠", "입고수량": 91, "누적판매수량": 6, "금주판매수량": 8, "판매율(%)": 6.6, "재고수량": 89, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STMRS15361", "제품명": "M 쿨매치 반팔 티셔츠", "입고수량": 81, "누적판매수량": 6, "금주판매수량": 1, "판매율(%)": 7.4, "재고수량": 81, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ10961", "제품명": "M 플레잉 폴로", "입고수량": 70, "누적판매수량": 6, "금주판매수량": 8, "판매율(%)": 8.6, "재고수량": 64, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP10261", "제품명": "W 더블니트 돌핀쇼츠", "입고수량": 90, "누적판매수량": 6, "금주판매수량": 3, "판매율(%)": 6.7, "재고수량": 87, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STMTR10261", "제품명": "M 쿠쉬라이트 트랙탑", "입고수량": 38, "누적판매수량": 6, "금주판매수량": 2, "판매율(%)": 15.8, "재고수량": 37, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STXWJ29661", "제품명": "U 라이트 스트레치 바시티 자켓", "입고수량": 41, "누적판매수량": 6, "금주판매수량": 3, "판매율(%)": 14.6, "재고수량": 39, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "JP", "품번": "ST26STXJP10161", "제품명": "M 피케 저지 봄버 자켓", "입고수량": 39, "누적판매수량": 5, "금주판매수량": 2, "판매율(%)": 12.8, "재고수량": 37, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP20261", "제품명": "W 에센셜 4인치 쇼츠", "입고수량": 80, "누적판매수량": 5, "금주판매수량": 3, "판매율(%)": 6.2, "재고수량": 80, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ10361", "제품명": "W 더블니트 브이넥 긴팔 폴로", "입고수량": 89, "누적판매수량": 5, "금주판매수량": 0, "판매율(%)": 5.6, "재고수량": 88, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10363", "제품명": "W 클래식 그래픽 미니 티셔츠", "입고수량": 132, "누적판매수량": 4, "금주판매수량": 6, "판매율(%)": 3.0, "재고수량": 128, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STWWJ20863", "제품명": "W 쿠쉬라이트 경량 우븐 크롭 자켓", "입고수량": 155, "누적판매수량": 4, "금주판매수량": 4, "판매율(%)": 2.6, "재고수량": 154, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "MT", "품번": "ST26STMMT10361", "제품명": "M 쿠쉬라이트 프렌치 반팔 맨투맨", "입고수량": 41, "누적판매수량": 4, "금주판매수량": 4, "판매율(%)": 9.8, "재고수량": 41, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RL", "품번": "ST26STWRL16161", "제품명": "W 쿨매치 컬러블럭 긴팔 티셔츠", "입고수량": 66, "누적판매수량": 4, "금주판매수량": 1, "판매율(%)": 6.1, "재고수량": 66, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS11161", "제품명": "W 레이프레쉬 피케 반팔 티셔츠", "입고수량": 142, "누적판매수량": 4, "금주판매수량": 3, "판매율(%)": 2.8, "재고수량": 140, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "LG", "품번": "ST26STWLG10563", "제품명": "W 마시멜로우 바이커 쇼츠", "입고수량": 72, "누적판매수량": 4, "금주판매수량": 7, "판매율(%)": 5.6, "재고수량": 71, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP26361", "제품명": "W 프레쉬닷 핀턱 쇼츠", "입고수량": 72, "누적판매수량": 4, "금주판매수량": 6, "판매율(%)": 5.6, "재고수량": 71, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ16161", "제품명": "M 지퍼넥 폴로", "입고수량": 61, "누적판매수량": 4, "금주판매수량": 8, "판매율(%)": 6.6, "재고수량": 60, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ11063", "제품명": "W 플레잉 슬리브리스 폴로", "입고수량": 149, "누적판매수량": 4, "금주판매수량": 7, "판매율(%)": 2.7, "재고수량": 146, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STXWJ26161", "제품명": "U 프레쉬닷 윈드브레이커", "입고수량": 41, "누적판매수량": 4, "금주판매수량": 6, "판매율(%)": 9.8, "재고수량": 38, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP26263", "제품명": "W 우븐 경량 쇼츠", "입고수량": 103, "누적판매수량": 4, "금주판매수량": 2, "판매율(%)": 3.9, "재고수량": 100, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ10261", "제품명": "M 더블니트 오픈카라 폴로", "입고수량": 55, "누적판매수량": 3, "금주판매수량": 2, "판매율(%)": 5.5, "재고수량": 55, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KV", "품번": "ST26STWKV30261", "제품명": "W 브이넥 케이블 니트 베스트", "입고수량": 60, "누적판매수량": 3, "금주판매수량": 1, "판매율(%)": 5.0, "재고수량": 57, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ10261", "제품명": "W 더블니트 오픈카라 폴로", "입고수량": 89, "누적판매수량": 3, "금주판매수량": 5, "판매율(%)": 3.4, "재고수량": 87, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ16261", "제품명": "M 리네아 폴로", "입고수량": 77, "누적판매수량": 3, "금주판매수량": 1, "판매율(%)": 3.9, "재고수량": 74, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP10361", "제품명": "W 더블니트 플레어 쇼츠", "입고수량": 90, "누적판매수량": 3, "금주판매수량": 5, "판매율(%)": 3.3, "재고수량": 88, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STMRS16261", "제품명": "M 리네아 반팔 티셔츠", "입고수량": 72, "누적판매수량": 3, "금주판매수량": 1, "판매율(%)": 4.2, "재고수량": 72, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STWTR10761", "제품명": "W 쿠쉬라이트 프렌치 크롭 후드 집업", "입고수량": 47, "누적판매수량": 3, "금주판매수량": 2, "판매율(%)": 6.4, "재고수량": 44, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16161", "제품명": "W 지퍼넥 폴로", "입고수량": 73, "누적판매수량": 3, "금주판매수량": 2, "판매율(%)": 4.1, "재고수량": 70, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "JP", "품번": "ST26STWJP10161", "제품명": "W 피케 저지 봄버 자켓", "입고수량": 38, "누적판매수량": 3, "금주판매수량": 1, "판매율(%)": 7.9, "재고수량": 36, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STMSP16261", "제품명": "M 리네아 5인치 우븐 쇼츠", "입고수량": 88, "누적판매수량": 3, "금주판매수량": 6, "판매율(%)": 3.4, "재고수량": 88, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS16261", "제품명": "W 리네아 반팔 티셔츠", "입고수량": 79, "누적판매수량": 2, "금주판매수량": 1, "판매율(%)": 2.5, "재고수량": 78, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "WS", "품번": "ST26STWWS26561", "제품명": "W 스트라이프 우븐 셔츠", "입고수량": 60, "누적판매수량": 2, "금주판매수량": 0, "판매율(%)": 3.3, "재고수량": 58, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STMSP26361", "제품명": "M 프레쉬닷 우븐 6인치 쇼츠", "입고수량": 66, "누적판매수량": 2, "금주판매수량": 3, "판매율(%)": 3.0, "재고수량": 66, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STMRS11161", "제품명": "M 레이프레쉬 피케 반팔 티셔츠", "입고수량": 55, "누적판매수량": 2, "금주판매수량": 1, "판매율(%)": 3.6, "재고수량": 54, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STWWJ20363", "제품명": "W 라이트 스트레치 셔켓", "입고수량": 75, "누적판매수량": 2, "금주판매수량": 0, "판매율(%)": 2.7, "재고수량": 73, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "BR", "품번": "ST26STWBR15163", "제품명": "W 면터치 골지 브라탑", "입고수량": 88, "누적판매수량": 2, "금주판매수량": 4, "판매율(%)": 2.3, "재고수량": 86, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS15561", "제품명": "W 립 슬림핏 반팔 티셔츠", "입고수량": 137, "누적판매수량": 2, "금주판매수량": 4, "판매율(%)": 1.5, "재고수량": 136, "상태": "정상"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STMWJ20863", "제품명": "M 쿠쉬라이트 경량 바람막이", "입고수량": 60, "누적판매수량": 2, "금주판매수량": 2, "판매율(%)": 3.3, "재고수량": 59, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP16261", "제품명": "W 리네아 4인치 우븐 쇼츠", "입고수량": 77, "누적판매수량": 2, "금주판매수량": 3, "판매율(%)": 2.6, "재고수량": 77, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP20863", "제품명": "W 쿠쉬라이트 경량 스커티 쇼츠", "입고수량": 132, "누적판매수량": 1, "금주판매수량": 1, "판매율(%)": 0.8, "재고수량": 132, "상태": "정상"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STWWJ20963", "제품명": "W 쿠쉬라이트 경량 아노락", "입고수량": 138, "누적판매수량": 1, "금주판매수량": 3, "판매율(%)": 0.7, "재고수량": 138, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK16063", "제품명": "W 하이웨이스트 우븐 플리츠 스커트", "입고수량": 136, "누적판매수량": 1, "금주판매수량": 5, "판매율(%)": 0.7, "재고수량": 136, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STMKU30463", "제품명": "M 스몰 케이블 반팔 폴로", "입고수량": 42, "누적판매수량": 1, "금주판매수량": 1, "판매율(%)": 2.4, "재고수량": 42, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STXWJ26261", "제품명": "U 프레쉬닷 반팔 아노락", "입고수량": 46, "누적판매수량": 1, "금주판매수량": 0, "판매율(%)": 2.2, "재고수량": 46, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16261", "제품명": "W 리네아 폴로", "입고수량": 76, "누적판매수량": 1, "금주판매수량": 1, "판매율(%)": 1.3, "재고수량": 76, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "KC", "품번": "ST26STWKC30261", "제품명": "W 케이블 반팔 가디건", "입고수량": 77, "누적판매수량": 1, "금주판매수량": 0, "판매율(%)": 1.3, "재고수량": 76, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP10761", "제품명": "W 쿠쉬라이트 프렌치 쇼츠", "입고수량": 49, "누적판매수량": 1, "금주판매수량": 1, "판매율(%)": 2.0, "재고수량": 49, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "MT", "품번": "ST26STWMT10361", "제품명": "W 쿠쉬라이트 프렌치 반팔 하프집", "입고수량": 82, "누적판매수량": 1, "금주판매수량": 1, "판매율(%)": 1.2, "재고수량": 82, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16063", "제품명": "W 돌먼 사이드 스트링 플레잉 폴로", "입고수량": 98, "누적판매수량": 1, "금주판매수량": 2, "판매율(%)": 1.0, "재고수량": 98, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "WT", "품번": "ST26STMWT26161", "제품명": "M 프레쉬닷 우븐 티셔츠", "입고수량": 52, "누적판매수량": 1, "금주판매수량": 0, "판매율(%)": 1.9, "재고수량": 51, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STKSP70063", "제품명": "MC 어드밴티지 스태프 쇼츠 JR", "입고수량": 25, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "SL", "품번": "ST26STWSL15463", "제품명": "W 립 슬림핏 링거 슬리브리스", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STKPQ70063", "제품명": "MC 앨리 스태프 반팔 폴로셔츠 JR", "입고수량": 30, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STKPT70063", "제품명": "MC 베이스라인 스태프 팬츠 JR", "입고수량": 10, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STMWJ70063", "제품명": "M MC 탑스핀 스태프 자켓", "입고수량": 179, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 4, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STMRS50263", "제품명": "M 백 아트웍 코튼 반팔 티셔츠", "입고수량": 34, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 34, "상태": "정상"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "SL", "품번": "ST26STWSL15563", "제품명": "W 립 슬림핏 슬리브리스", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STXRS10863", "제품명": "U 그래픽 레귤러핏 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ16363", "제품명": "M 클래식 60th 폴로", "입고수량": 45, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 45, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ10563", "제품명": "W 카라 포인트 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "ACC", "중분류": "Acc_etc", "ITEM": "SO", "품번": "ST26STXSO70063", "제품명": "U MC 스태프 양말", "입고수량": 395, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 40, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK70063", "제품명": "W MC 스크래치 스태프 플리츠 스커트", "입고수량": 64, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 13, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS13463", "제품명": "W MCCC 에디션 그래픽 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ70063", "제품명": "M MC 앨리 스태프 반팔 폴로셔츠", "입고수량": 126, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 14, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK66563", "제품명": "W 플라잉 언밸런스 플리츠 스커트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STWKU30763", "제품명": "W FRESCA KNIT 스트라이프 반팔 폴로", "입고수량": 111, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 111, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STWKU30563", "제품명": "W FRESCA KNIT 케이블 반팔 폴로", "입고수량": 112, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 112, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK20463", "제품명": "W 라이트 스트레치 벌룬 스커트", "입고수량": 66, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 66, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STMSP70063", "제품명": "M MC 어드밴티지 스태프 쇼츠", "입고수량": 132, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 15, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10663", "제품명": "W 쿨매치 그래픽 반팔 티셔츠", "입고수량": 111, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 111, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS16063", "제품명": "W 립 슬림핏 타이드 리본 반팔 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16363", "제품명": "W 클래식 60th 폴로", "입고수량": 70, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 70, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STWTR70063", "제품명": "W MC 스태프 트랙탑", "입고수량": 81, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 8, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK20563", "제품명": "W 경량 우븐 스커트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK12163", "제품명": "W 타키니 플라잉 메쉬 스커트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16963", "제품명": "W 립 슬림 슬리브리스 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Outer", "ITEM": "WJ", "품번": "ST26STWWJ26461", "제품명": "W 플로위 반팔 아노락", "입고수량": 108, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 108, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS11261", "제품명": "W 레이프레쉬 그래픽 반팔 티셔츠", "입고수량": 56, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 56, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STMKU30563", "제품명": "M FRESCA KNIT 반팔 폴로", "입고수량": 41, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 41, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STWKU50363", "제품명": "W 데일리 반팔 폴로 스웨터", "입고수량": 40, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 40, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STMKU50163", "제품명": "M 스트라이프 반팔 폴로 스웨터", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10963", "제품명": "W 슬림 골지립 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ70063", "제품명": "W MC 타이브레이크 스태프 반팔 폴로셔츠", "입고수량": 140, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 19, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KV", "품번": "ST26STWKV30463", "제품명": "W 슬리브리스 폴로 스웨터 베스트", "입고수량": 86, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 86, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KV", "품번": "ST26STWKV66463", "제품명": "W 60th 티핑 스웨터 베스트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "ACC", "중분류": "Acc_etc", "ITEM": "PR", "품번": "ST26STXPR70063", "제품명": "U MC 스태프 손목밴드", "입고수량": 200, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 20, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "OP", "품번": "ST26STWOP26163", "제품명": "W 슬림 벌룬 드레스", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STXRS10363", "제품명": "U 클래식 스몰 그래픽 반팔 티셔츠", "입고수량": 61, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 61, "상태": "정상"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SP", "품번": "ST26STWSP26461", "제품명": "W 플로위 스커티 쇼츠", "입고수량": 151, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 151, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ70163", "제품명": "M MC 컨티넨탈 스태프 반팔 폴로셔츠", "입고수량": 400, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 19, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STMTR70063", "제품명": "M MC 스태프 트랙탑", "입고수량": 93, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 6, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STMRS10663", "제품명": "M 쿨매치 코스타 그래픽 반팔 티셔츠", "입고수량": 46, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 46, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STWPT70063", "제품명": "W MC 베이스라인 스태프 팬츠", "입고수량": 27, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 5, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STWPT20761", "제품명": "W 밴딩 우븐 와이드 팬츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Wear_etc", "ITEM": "BR", "품번": "ST26STWBR15063", "제품명": "W  마시멜로우 브라탑", "입고수량": 62, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 62, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KV", "품번": "ST26STWKV50163", "제품명": "W 스트라이프 스웨터 베스트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ10563", "제품명": "M 카라 포인트 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ16463", "제품명": "W 클래식 슬리브리스 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STXRS11261", "제품명": "U 레이프레쉬 그래픽 반팔 티셔츠", "입고수량": 90, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 90, "상태": "재고 위험"}, {"대분류": "ACC", "중분류": "Acc_etc", "ITEM": "TW", "품번": "ST26STXTW70063", "제품명": "U MC 스태프 타올 70 X 130", "입고수량": 3000, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 1582, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK16163", "제품명": "W 플라잉 레이어드 스커트", "입고수량": 117, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 117, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "PT", "품번": "ST26STMPT70063", "제품명": "M MC 베이스라인 스태프 팬츠", "입고수량": 56, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 5, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "OP", "품번": "ST26STWOP10863", "제품명": "W 에센셜 슬리브리스 드레스", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "KU", "품번": "ST26STWKU30663", "제품명": "W FRESCA KNIT 스트라이프 반팔", "입고수량": 99, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 99, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS50263", "제품명": "W 백 아트웍 반팔 티셔츠", "입고수량": 40, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 40, "상태": "정상"}, {"대분류": "ACC", "중분류": "Headwear", "ITEM": "CP", "품번": "ST26STXCP70063", "제품명": "U MC 스태프 캡", "입고수량": 659, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 20, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ10463", "제품명": "M 스트라이프 반팔 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STMPQ70263", "제품명": "M MC 더블스 반팔 폴로셔츠", "입고수량": 90, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 9, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Bottom", "ITEM": "SK", "품번": "ST26STWSK50163", "제품명": "W 스트라이프 스웨터 스커트", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "PQ", "품번": "ST26STWPQ10463", "제품명": "W 스트라이프 반팔 폴로", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "TR", "품번": "ST26STKTR70063", "제품명": "MC 스태프 트랙탑 JR", "입고수량": 15, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "재고 위험"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STWRS10863", "제품명": "W 그래픽 레귤러핏 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}, {"대분류": "의류", "중분류": "Inner", "ITEM": "RS", "품번": "ST26STXRS13463", "제품명": "U MCCC 에디션 그래픽 티셔츠", "입고수량": 0, "누적판매수량": 0, "금주판매수량": 0, "판매율(%)": 0.0, "재고수량": 0, "상태": "정상"}];
+const ITEMS_LIST   = ["BR", "CP", "HD", "JP", "KC", "KP", "KU", "KV", "LG", "MT", "OP", "PQ", "PR", "PT", "RL", "RS", "SK", "SL", "SO", "SP", "TR", "TW", "WJ", "WS", "WT"];
+const CAT1_LIST    = ["ACC", "의류"];
+const CAT2_LIST    = ["Acc_etc", "Bottom", "Headwear", "Inner", "Outer", "Wear_etc"];
+
+// ── CHART 1: ITEM별 판매율 ────────────────────────────────────
+const PALETTE = [
+  '#5c7cfa','#43d9ad','#ffd166','#ff6b6b','#4fc3f7',
+  '#a29bfe','#fd79a8','#55efc4','#fdcb6e','#74b9ff',
+  '#e17055','#00cec9','#6c5ce7','#fab1a0','#81ecec',
+  '#dfe6e9','#b2bec3','#636e72','#2d3436','#0984e3',
+  '#d63031','#e84393','#00b894','#e17055','#fdcb6e'
+];
+const itemColors = ITEM_LABELS.map((_,i) => PALETTE[i % PALETTE.length]);
+
+let itemChartFilter = '__all__';
+let itemChartInstance = null;
+
+function buildItemChart() {
+  if (itemChartInstance) itemChartInstance.destroy();
+  const indices = [];
+  for (let i = 0; i < ITEM_LABELS.length; i++) {
+    if (itemChartFilter === '__all__' || ITEM_CAT1[i] === itemChartFilter) indices.push(i);
+  }
+  const labels = indices.map(i => ITEM_LABELS[i]);
+  const amt26  = indices.map(i => ITEM_AMOUNT[i]);
+  const amt25  = indices.map(i => ITEM_AMOUNT25[i]);
+  const rates  = indices.map(i => ITEM_RATES[i]);
+
+  itemChartInstance = new Chart(
+    document.getElementById('itemChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '26SS', data: amt26, backgroundColor: '#5c7cfacc', borderColor: '#5c7cfa', borderWidth: 1, borderRadius: 4 },
+        { label: '25SS 동기간', data: amt25, backgroundColor: '#a29bfe88', borderColor: '#a29bfe', borderWidth: 1, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#6b7591', font: { size: 11 } } },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: {
+            afterBody: (items) => {
+              const idx = items[0].dataIndex;
+              const v26 = amt26[idx], v25 = amt25[idx];
+              const diff = v26 - v25;
+              const pct = v25 > 0 ? ((diff/v25)*100).toFixed(1) : 'N/A';
+              return ['', ` YoY: ${diff>=0?'+':''}${(diff/1e6).toFixed(1)}M (${diff>=0?'+':''}${pct}%)`, ` 판매율(26SS): ${rates[idx]}%`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#6b7591', font: { size: 11 } }, grid: { color: '#e5e8f4' } },
+        y: { ticks: { color: '#6b7591', callback: v => (v/1e6).toFixed(0)+'M' }, grid: { color: '#e5e8f4' }, min: 0 }
+      }
+    }
+  });
+}
+
+document.getElementById('itemFilterRow').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  document.querySelectorAll('#itemFilterRow .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  itemChartFilter = chip.dataset.cat;
+  buildItemChart();
+});
+
+buildItemChart();
+
+// ── CHART 2: 주차별 판매 전년대비 ────────────────────────────
+const chipRow = document.getElementById('chipRow');
+let activeChips = ['__total__'];
+let weekCatFilter = '__all__';
+
+const MAX_WEEKS = Math.max(WEEK_LABELS.length, WEEK_LABELS_25.length);
+const X_LABELS  = Array.from({length: MAX_WEEKS}, (_, i) => `W${i+1}`);
+
+function fmtAmt(v) {
+  if (v >= 1e8)  return (v/1e8).toFixed(1) + '억';
+  if (v >= 1e4)  return Math.round(v/1e4) + '만';
+  return v.toLocaleString();
+}
+
+function makeLineOptions(isAmt) {
+  return {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#6b7591', font: { size: 10 }, boxWidth: 24 } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.raw ?? 0;
+            const lbl = ctx.dataset.label;
+            return isAmt ? ` ${lbl}: ${fmtAmt(v)}` : ` ${lbl}: ${v.toLocaleString()}개`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#6b7591', font: { size: 10 } }, grid: { color: '#e5e8f4' } },
+      y: {
+        ticks: { color: '#6b7591', font: { size: 10 },
+                  callback: v => isAmt ? fmtAmt(v) : v.toLocaleString() },
+        grid: { color: '#e5e8f4' }, beginAtZero: true
+      }
+    }
+  };
+}
+
+function buildWeekCharts() {
+  if (window._wChartQty) window._wChartQty.destroy();
+  if (window._wChartAmt) window._wChartAmt.destroy();
+
+  const dsQty = [], dsAmt = [];
+
+  // 대분류 필터에 따른 ITEM 목록 결정
+  const filteredItems = weekCatFilter === '__all__' ? ITEMS_LIST
+    : ITEMS_LIST.filter((_, i) => {
+        const idx = ITEM_LABELS.indexOf(ITEMS_LIST[i] || '');
+        return idx === -1 || ITEM_CAT1[idx] === weekCatFilter;
+      });
+
+  activeChips.forEach((key) => {
+    const isTotal = key === '__total__';
+    // ITEM 칩인데 현재 대분류 필터에 안 맞으면 스킵
+    if (!isTotal && weekCatFilter !== '__all__') {
+      const idx = ITEM_LABELS.indexOf(key);
+      if (idx !== -1 && ITEM_CAT1[idx] !== weekCatFilter) return;
+    }
+    const color   = isTotal ? '#5c7cfa' : PALETTE[(ITEMS_LIST.indexOf(key)+3) % PALETTE.length];
+    const name    = isTotal ? (weekCatFilter === '__all__' ? '전체' : weekCatFilter) : key;
+
+    let qty26, qty25, amt26, amt25;
+    if (isTotal) {
+      if (weekCatFilter === '__all__') {
+        qty26 = WEEK_TOTAL; qty25 = WEEK_TOTAL_25;
+        amt26 = WEEK_TOTAL_AMT; amt25 = WEEK_TOTAL_25_AMT;
+      } else {
+        qty26 = CAT1_WEEKLY[weekCatFilter] || []; qty25 = CAT1_WEEKLY_25[weekCatFilter] || [];
+        amt26 = CAT1_WEEKLY_AMT[weekCatFilter] || []; amt25 = CAT1_WEEKLY_25_AMT[weekCatFilter] || [];
+      }
+    } else {
+      qty26 = ITEM_WEEKLY[key] || []; qty25 = ITEM_WEEKLY_25[key] || [];
+      amt26 = ITEM_WEEKLY_AMT[key] || []; amt25 = ITEM_WEEKLY_25_AMT[key] || [];
+    }
+
+    dsQty.push({
+      label: `${name} 26SS`, data: qty26,
+      borderColor: color, backgroundColor: color+'20',
+      tension: 0.35, fill: false, pointRadius: 4, borderWidth: 2,
+    });
+    dsQty.push({
+      label: `${name} 25SS`, data: qty25,
+      borderColor: color, backgroundColor: color+'10',
+      tension: 0.35, fill: false, pointRadius: 3, borderWidth: 1.5,
+      borderDash: [5, 4],
+    });
+    dsAmt.push({
+      label: `${name} 26SS`, data: amt26,
+      borderColor: color, backgroundColor: color+'20',
+      tension: 0.35, fill: false, pointRadius: 4, borderWidth: 2,
+    });
+    dsAmt.push({
+      label: `${name} 25SS`, data: amt25,
+      borderColor: color, backgroundColor: color+'10',
+      tension: 0.35, fill: false, pointRadius: 3, borderWidth: 1.5,
+      borderDash: [5, 4],
+    });
+  });
+
+  window._wChartQty = new Chart(
+    document.getElementById('weekChartQty').getContext('2d'),
+    { type:'line', data:{ labels: X_LABELS, datasets: dsQty }, options: makeLineOptions(false) }
+  );
+  window._wChartAmt = new Chart(
+    document.getElementById('weekChartAmt').getContext('2d'),
+    { type:'line', data:{ labels: X_LABELS, datasets: dsAmt }, options: makeLineOptions(true) }
+  );
+}
+
+// ITEM→대분류 매핑
+const ITEM_TO_CAT1 = {};
+ITEM_LABELS.forEach((item, i) => { ITEM_TO_CAT1[item] = ITEM_CAT1[i]; });
+
+function buildChipRow() {
+  chipRow.innerHTML = '';
+  const totalChip = document.createElement('div');
+  totalChip.className = 'chip active';
+  totalChip.textContent = '전체';
+  totalChip.dataset.key = '__total__';
+  chipRow.appendChild(totalChip);
+  activeChips = ['__total__'];
+
+  ITEMS_LIST.forEach(item => {
+    if (weekCatFilter !== '__all__' && ITEM_TO_CAT1[item] !== weekCatFilter) return;
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = item;
+    c.dataset.key = item;
+    chipRow.appendChild(c);
+  });
+}
+
+buildChipRow();
+
+// 대분류 필터 (주차별)
+document.getElementById('weekFilterRow').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  document.querySelectorAll('#weekFilterRow .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  weekCatFilter = chip.dataset.cat;
+  buildChipRow();
+  buildWeekCharts();
+});
+
+chipRow.addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const key = chip.dataset.key;
+  if (key === '__total__') {
+    activeChips = ['__total__'];
+    chipRow.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  } else {
+    const idx = activeChips.indexOf('__total__');
+    if (idx !== -1) activeChips.splice(idx, 1);
+    chipRow.querySelector('[data-key="__total__"]').classList.remove('active');
+    if (chip.classList.contains('active')) {
+      chip.classList.remove('active');
+      activeChips = activeChips.filter(k => k !== key);
+      if (activeChips.length === 0) {
+        activeChips = ['__total__'];
+        chipRow.querySelector('[data-key="__total__"]').classList.add('active');
+      }
+    } else {
+      chip.classList.add('active');
+      activeChips.push(key);
+    }
+  }
+  buildWeekCharts();
+});
+
+buildWeekCharts();
+
+// ── FILTERS ──────────────────────────────────────────────────
+const f_cat1   = document.getElementById('f_cat1');
+const f_cat2   = document.getElementById('f_cat2');
+const f_item   = document.getElementById('f_item');
+const f_status = document.getElementById('f_status');
+const f_search = document.getElementById('f_search');
+
+CAT1_LIST.forEach(v => f_cat1.add(new Option(v,v)));
+CAT2_LIST.forEach(v => f_cat2.add(new Option(v,v)));
+ITEMS_LIST.forEach(v => f_item.add(new Option(v,v)));
+
+// ── TABLE ─────────────────────────────────────────────────────
+let sortCol = '판매율(%)';
+let sortDir = -1;
+const PAGE_SIZE = 30;
+let currentPage = 1;
+
+function getFiltered() {
+  const c1 = f_cat1.value, c2 = f_cat2.value;
+  const it = f_item.value, st = f_status.value;
+  const kw = f_search.value.toLowerCase();
+  return TABLE_DATA.filter(r =>
+    (!c1 || r['대분류']===c1) &&
+    (!c2 || r['중분류']===c2) &&
+    (!it || r['ITEM']===it) &&
+    (!st || r['상태']===st) &&
+    (!kw || r['제품명'].toLowerCase().includes(kw) || r['품번'].toLowerCase().includes(kw))
+  );
+}
+
+function getSorted(data) {
+  return [...data].sort((a,b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv, 'ko');
+    return sortDir * ((av||0)-(bv||0));
+  });
+}
+
+function rateBar(v) {
+  const capped = Math.min(v, 100);
+  const color = v>=70 ? '#ffd166' : v>=30 ? '#43d9ad' : '#ff6b6b';
+  return `<div class="rate-bar">
+    <div class="bar" style="width:${capped}px;background:${color}"></div>
+    <span class="num">${v.toFixed(1)}%</span>
+  </div>`;
+}
+
+function badge(st) {
+  if (st==='리오더 검토') return `<span class="badge reorder">리오더 검토</span>`;
+  if (st==='재고 위험')   return `<span class="badge risk">재고 위험</span>`;
+  return `<span class="badge normal">정상</span>`;
+}
+
+function renderTable() {
+  const filtered = getFiltered();
+  const sorted   = getSorted(filtered);
+  const total    = sorted.length;
+  const pages    = Math.max(1, Math.ceil(total/PAGE_SIZE));
+  if (currentPage > pages) currentPage = pages;
+  const slice = sorted.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+
+  document.getElementById('tblInfo').textContent =
+    `${total.toLocaleString()}개 항목 / ${currentPage}/${pages} 페이지`;
+
+  const tbody = document.getElementById('skuBody');
+  tbody.innerHTML = slice.map(r => `<tr>
+    <td>${r['대분류']}</td>
+    <td>${r['중분류']}</td>
+    <td style="font-weight:600;color:var(--accent)">${r['ITEM']}</td>
+    <td style="color:var(--muted)">${r['품번']}</td>
+    <td>${r['제품명']}</td>
+    <td style="text-align:right">${(r['입고수량']||0).toLocaleString()}</td>
+    <td style="text-align:right">${(r['누적판매수량']||0).toLocaleString()}</td>
+    <td style="text-align:right">${(r['금주판매수량']||0).toLocaleString()}</td>
+    <td>${rateBar(r['판매율(%)'])}</td>
+    <td style="text-align:right">${(r['재고수량']||0).toLocaleString()}</td>
+    <td>${badge(r['상태'])}</td>
+  </tr>`).join('');
+
+  // 페이지네이션
+  const pag = document.getElementById('pagination');
+  pag.innerHTML = '';
+  const maxBtn = 7;
+  let start = Math.max(1, currentPage-3), end = Math.min(pages, start+maxBtn-1);
+  if (end-start < maxBtn-1) start = Math.max(1, end-maxBtn+1);
+
+  const prev = document.createElement('button');
+  prev.className = 'page-btn';
+  prev.textContent = '‹';
+  prev.onclick = () => { if(currentPage>1){currentPage--;renderTable();} };
+  pag.appendChild(prev);
+
+  for (let p=start; p<=end; p++) {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn' + (p===currentPage?' active':'');
+    btn.textContent = p;
+    btn.onclick = ((_p) => () => {currentPage=_p;renderTable();})(p);
+    pag.appendChild(btn);
+  }
+
+  const next = document.createElement('button');
+  next.className = 'page-btn';
+  next.textContent = '›';
+  next.onclick = () => { if(currentPage<pages){currentPage++;renderTable();} };
+  pag.appendChild(next);
+}
+
+// 정렬 클릭
+document.querySelectorAll('thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol===col) { sortDir *= -1; }
+    else { sortCol=col; sortDir=-1; }
+    document.querySelectorAll('thead th').forEach(t => t.classList.remove('asc','desc'));
+    th.classList.add(sortDir===1?'asc':'desc');
+    currentPage = 1;
+    renderTable();
+  });
+});
+
+// 필터 이벤트
+[f_cat1,f_cat2,f_item,f_status,f_search].forEach(el =>
+  el.addEventListener('input', () => { currentPage=1; renderTable(); })
+);
+
+// 초기 렌더
+renderTable();
+
+// ── 카테고리별 판매 현황 ──────────────────────────────────────
+const CAT_ROWS = [{"name": "합계", "level": 0, "qty26": 2062, "qty25": 1356, "qty_yoy": 52.1, "amt26": 240653000, "amt25": 186994000, "amt_yoy": 28.7, "in_amt26": 6957087000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 357, "wk_qty25": 448, "wk_qty_yoy": -20.3, "wk_amt26": 43354000, "wk_amt25": 58032000, "wk_amt_yoy": -25.3, "wow": 19.0, "rate26": 4.1, "rate25": 0.0}, {"name": "의류", "level": 1, "qty26": 1931, "qty25": 1356, "qty_yoy": 42.4, "amt26": 234758000, "amt25": 186994000, "amt_yoy": 25.5, "in_amt26": 6595915000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 357, "wk_qty25": 448, "wk_qty_yoy": -20.3, "wk_amt26": 43354000, "wk_amt25": 58032000, "wk_amt_yoy": -25.3, "wow": 19.4, "rate26": 4.2, "rate25": 0.0}, {"name": "Outer", "level": 2, "qty26": 63, "qty25": 117, "qty_yoy": -46.2, "amt26": 13597000, "amt25": 27243000, "amt_yoy": -50.1, "in_amt26": 956573000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 21, "wk_qty25": 32, "wk_qty_yoy": -34.4, "wk_amt26": 4269000, "wk_amt25": 6598000, "wk_amt_yoy": -35.3, "wow": 50.0, "rate26": 1.4, "rate25": 0.0}, {"name": "JP", "level": 3, "qty26": 17, "qty25": 0, "qty_yoy": null, "amt26": 4403000, "amt25": 0, "amt_yoy": null, "in_amt26": 83916000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 3, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 777000, "wk_amt25": 0, "wk_amt_yoy": null, "wow": 0.0, "rate26": 5.2, "rate25": 0.0}, {"name": "KC", "level": 3, "qty26": 1, "qty25": 0, "qty_yoy": null, "amt26": 179000, "amt25": 0, "amt_yoy": null, "in_amt26": 45466000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.4, "rate25": 0.0}, {"name": "WJ", "level": 3, "qty26": 45, "qty25": 117, "qty_yoy": -61.5, "amt26": 9015000, "amt25": 27243000, "amt_yoy": -66.9, "in_amt26": 827191000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 18, "wk_qty25": 32, "wk_qty_yoy": -43.8, "wk_amt26": 3492000, "wk_amt25": 6598000, "wk_amt_yoy": -47.1, "wow": 63.6, "rate26": 1.1, "rate25": 0.0}, {"name": "Inner", "level": 2, "qty26": 963, "qty25": 458, "qty_yoy": 110.3, "amt26": 115096000, "amt25": 56112000, "amt_yoy": 105.1, "in_amt26": 3179025000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 136, "wk_qty25": 160, "wk_qty_yoy": -15.0, "wk_amt26": 15135000, "wk_amt25": 17650000, "wk_amt_yoy": -14.2, "wow": -13.9, "rate26": 4.7, "rate25": 0.0}, {"name": "HD", "level": 3, "qty26": 180, "qty25": 30, "qty_yoy": 500.0, "amt26": 22209000, "amt25": 3870000, "amt_yoy": 473.9, "in_amt26": 144454000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 6, "wk_qty25": 12, "wk_qty_yoy": -50.0, "wk_amt26": 865000, "wk_amt25": 1548000, "wk_amt_yoy": -44.1, "wow": 0.0, "rate26": 15.4, "rate25": 0.0}, {"name": "KP", "level": 3, "qty26": 15, "qty25": 0, "qty_yoy": null, "amt26": 2685000, "amt25": 0, "amt_yoy": null, "in_amt26": 53163000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 48.8, "rate25": 0.0}, {"name": "KU", "level": 3, "qty26": 1, "qty25": 17, "qty_yoy": -94.1, "amt26": 169000, "amt25": 2283000, "amt_yoy": -92.6, "in_amt26": 294560000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 1, "wk_qty25": 8, "wk_qty_yoy": -87.5, "wk_amt26": 169000, "wk_amt25": 1122000, "wk_amt_yoy": -84.9, "wow": null, "rate26": 0.1, "rate25": 0.0}, {"name": "KV", "level": 3, "qty26": 8, "qty25": 0, "qty_yoy": null, "amt26": 1112000, "amt25": 0, "amt_yoy": null, "in_amt26": 63245000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 1, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 139000, "wk_amt25": 0, "wk_amt_yoy": null, "wow": -50.0, "rate26": 1.8, "rate25": 0.0}, {"name": "MT", "level": 3, "qty26": 208, "qty25": 102, "qty_yoy": 103.9, "amt26": 24272000, "amt25": 13338000, "amt_yoy": 82.0, "in_amt26": 177379000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 20, "wk_qty25": 25, "wk_qty_yoy": -20.0, "wk_amt26": 2320000, "wk_amt25": 3235000, "wk_amt_yoy": -28.3, "wow": -35.5, "rate26": 13.7, "rate25": 0.0}, {"name": "OP", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 0, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.0, "rate25": 0.0}, {"name": "PQ", "level": 3, "qty26": 274, "qty25": 130, "qty_yoy": 110.8, "amt26": 33276000, "amt25": 15850000, "amt_yoy": 109.9, "in_amt26": 1474192000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 51, "wk_qty25": 44, "wk_qty_yoy": 15.9, "wk_amt26": 6219000, "wk_amt25": 5396000, "wk_amt_yoy": 15.3, "wow": 10.9, "rate26": 2.3, "rate25": 0.0}, {"name": "RL", "level": 3, "qty26": 9, "qty25": 4, "qty_yoy": 125.0, "amt26": 891000, "amt25": 356000, "amt_yoy": 150.3, "in_amt26": 20295000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 1, "wk_qty25": 3, "wk_qty_yoy": -66.7, "wk_amt26": 99000, "wk_amt25": 267000, "wk_amt_yoy": -62.9, "wow": -66.7, "rate26": 4.4, "rate25": 0.0}, {"name": "RS", "level": 3, "qty26": 147, "qty25": 99, "qty_yoy": 48.5, "amt26": 10513000, "amt25": 7751000, "amt_yoy": 35.6, "in_amt26": 580543000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 42, "wk_qty25": 59, "wk_qty_yoy": -28.8, "wk_amt26": 3078000, "wk_amt25": 4581000, "wk_amt_yoy": -32.8, "wow": 5.0, "rate26": 1.8, "rate25": 0.0}, {"name": "TR", "level": 3, "qty26": 121, "qty25": 76, "qty_yoy": 59.2, "amt26": 19969000, "amt25": 12664000, "amt_yoy": 57.7, "in_amt26": 371194000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 14, "wk_qty25": 9, "wk_qty_yoy": 55.6, "wk_amt26": 2246000, "wk_amt25": 1501000, "wk_amt_yoy": 49.6, "wow": -53.3, "rate26": 8.1, "rate25": 0.0}, {"name": "Wear_etc", "level": 2, "qty26": 4, "qty25": 29, "qty_yoy": -86.2, "amt26": 356000, "amt25": 2591000, "amt_yoy": -86.3, "in_amt26": 95453000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 4, "wk_qty25": 12, "wk_qty_yoy": -66.7, "wk_amt26": 356000, "wk_amt25": 1078000, "wk_amt_yoy": -67.0, "wow": null, "rate26": 1.1, "rate25": 0.0}, {"name": "BR", "level": 3, "qty26": 4, "qty25": 28, "qty_yoy": -85.7, "amt26": 356000, "amt25": 2492000, "amt_yoy": -85.7, "in_amt26": 46137000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 4, "wk_qty25": 11, "wk_qty_yoy": -63.6, "wk_amt26": 356000, "wk_amt25": 979000, "wk_amt_yoy": -63.6, "wow": null, "rate26": 0.8, "rate25": 0.0}, {"name": "SL", "level": 3, "qty26": 0, "qty25": 1, "qty_yoy": -100.0, "amt26": 0, "amt25": 99000, "amt_yoy": -100.0, "in_amt26": 0, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 1, "wk_qty_yoy": -100.0, "wk_amt26": 0, "wk_amt25": 99000, "wk_amt_yoy": -100.0, "wow": null, "rate26": 0.0, "rate25": 0.0}, {"name": "WS", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 23850000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 2.0, "rate25": 0.0}, {"name": "WT", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 25466000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.9, "rate25": 0.0}, {"name": "Bottom", "level": 2, "qty26": 901, "qty25": 752, "qty_yoy": 19.8, "amt26": 105709000, "amt25": 101048000, "amt_yoy": 4.6, "in_amt26": 2364864000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 196, "wk_qty25": 244, "wk_qty_yoy": -19.7, "wk_amt26": 23594000, "wk_amt25": 32706000, "wk_amt_yoy": -27.9, "wow": 54.3, "rate26": 4.9, "rate25": 0.0}, {"name": "LG", "level": 3, "qty26": 17, "qty25": 11, "qty_yoy": 54.5, "amt26": 1533000, "amt25": 939000, "amt_yoy": 63.3, "in_amt26": 47106000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 8, "wk_qty25": 11, "wk_qty_yoy": -27.3, "wk_amt26": 592000, "wk_amt25": 939000, "wk_amt_yoy": -37.0, "wow": 700.0, "rate26": 3.3, "rate25": 0.0}, {"name": "PT", "level": 3, "qty26": 149, "qty25": 97, "qty_yoy": 53.6, "amt26": 17561000, "amt25": 13323000, "amt_yoy": 31.8, "in_amt26": 206811000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 34, "wk_qty25": 22, "wk_qty_yoy": 54.5, "wk_amt26": 3926000, "wk_amt25": 3098000, "wk_amt_yoy": 26.7, "wow": 100.0, "rate26": 13.2, "rate25": 0.0}, {"name": "SK", "level": 3, "qty26": 490, "qty25": 511, "qty_yoy": -4.1, "amt26": 64120000, "amt25": 73809000, "amt_yoy": -13.1, "in_amt26": 1296763000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 95, "wk_qty25": 162, "wk_qty_yoy": -41.4, "wk_amt26": 13375000, "wk_amt25": 23558000, "wk_amt_yoy": -43.2, "wow": 61.0, "rate26": 5.1, "rate25": 0.0}, {"name": "SP", "level": 3, "qty26": 245, "qty25": 133, "qty_yoy": 84.2, "amt26": 22495000, "amt25": 12977000, "amt_yoy": 73.3, "in_amt26": 814184000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 59, "wk_qty25": 49, "wk_qty_yoy": 20.4, "wk_amt26": 5701000, "wk_amt25": 5111000, "wk_amt_yoy": 11.5, "wow": 18.0, "rate26": 2.8, "rate25": 0.0}, {"name": "ACC", "level": 1, "qty26": 131, "qty25": 0, "qty_yoy": null, "amt26": 5895000, "amt25": 0, "amt_yoy": null, "in_amt26": 361172000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": -100.0, "rate26": 1.6, "rate25": 0.0}, {"name": "Headwear", "level": 2, "qty26": 131, "qty25": 0, "qty_yoy": null, "amt26": 5895000, "amt25": 0, "amt_yoy": null, "in_amt26": 134347000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": -100.0, "rate26": 4.4, "rate25": 0.0}, {"name": "CP", "level": 3, "qty26": 131, "qty25": 0, "qty_yoy": null, "amt26": 5895000, "amt25": 0, "amt_yoy": null, "in_amt26": 134347000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": -100.0, "rate26": 4.4, "rate25": 0.0}, {"name": "Acc_etc", "level": 2, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 226825000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.0, "rate25": 0.0}, {"name": "PR", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 5800000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.0, "rate25": 0.0}, {"name": "SO", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 14025000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.0, "rate25": 0.0}, {"name": "TW", "level": 3, "qty26": 0, "qty25": 0, "qty_yoy": null, "amt26": 0, "amt25": 0, "amt_yoy": null, "in_amt26": 207000000, "in_amt25": 0, "in_amt_yoy": null, "wk_qty26": 0, "wk_qty25": 0, "wk_qty_yoy": null, "wk_amt26": 0, "wk_amt25": 0, "wk_amt_yoy": null, "wow": null, "rate26": 0.0, "rate25": 0.0}];
+
+const CAT_PARENT = (() => {
+  const p = new Array(CAT_ROWS.length).fill(-1);
+  let l1 = -1, l2 = -1;
+  CAT_ROWS.forEach((r, i) => {
+    if (r.level === 1)      { l1 = i; l2 = -1; }
+    else if (r.level === 2) { p[i] = l1; l2 = i; }
+    else if (r.level === 3) { p[i] = l2; }
+  });
+  return p;
+})();
+
+// 기본 상태: 중분류(level2)는 펼침, ITEM(level3)은 접힘
+const catCollapsed = new Set(
+  CAT_ROWS.map((r, i) => r.level === 2 ? i : -1).filter(i => i >= 0)
+);
+
+function fmtC(v)  { return (v != null && v !== 0) ? v.toLocaleString() : '—'; }
+function fmtM2(v) {
+  if (!v) return '—';
+  if (Math.abs(v) >= 1e8) return (v/1e8).toFixed(1)+'억';
+  if (Math.abs(v) >= 1e4) return Math.round(v/1e4).toLocaleString()+'만';
+  return v.toLocaleString();
+}
+function yoyTag(v) {
+  if (v == null) return '<span style="color:#aaa">—</span>';
+  const up = v >= 0;
+  return `<span style="color:${up?'#0d9488':'#dc2626'};font-weight:600">${up?'▲':'▼'}${Math.abs(v).toFixed(1)}%</span>`;
+}
+
+function buildCatTable() {
+  const tbody = document.getElementById('catBody');
+  tbody.innerHTML = '';
+
+  CAT_ROWS.forEach((row, i) => {
+    let hidden = false;
+    let p = CAT_PARENT[i];
+    while (p !== -1) {
+      if (catCollapsed.has(p)) { hidden = true; break; }
+      p = CAT_PARENT[p];
+    }
+
+    const hasChild   = CAT_ROWS.some((_, j) => CAT_PARENT[j] === i);
+    const isCollapsed = catCollapsed.has(i);
+    const lvl = row.level;
+    const pad = 10 + lvl * 18;
+
+    let rowBg = '', fw = '400';
+    if (lvl === 0) { rowBg = 'background:#e8ecf8;'; fw = '700'; }
+    else if (lvl === 1) { rowBg = 'background:#f0f3fc;'; fw = '600'; }
+    else if (lvl === 2) { fw = '500'; }
+
+    const tog = hasChild
+      ? `<span class="ctog" data-idx="${i}" style="cursor:pointer;color:#4361ee;font-size:10px;margin-right:4px">${isCollapsed ? '▶' : '▼'}</span>`
+      : `<span style="display:inline-block;width:14px;margin-right:4px"></span>`;
+
+    const tr = document.createElement('tr');
+    if (hidden) tr.style.display = 'none';
+    tr.innerHTML = `
+      <td style="${rowBg}padding-left:${pad}px;font-weight:${fw};white-space:nowrap">${tog}${row.name}</td>
+      <td style="text-align:right;border-left:2px solid #dde1f0">${fmtC(row.qty26)}</td>
+      <td style="text-align:right;color:#6b7591">${fmtC(row.qty25)}</td>
+      <td style="text-align:center">${yoyTag(row.qty_yoy)}</td>
+      <td style="text-align:right;border-left:2px solid #dde1f0">${fmtM2(row.amt26)}</td>
+      <td style="text-align:right;color:#6b7591">${fmtM2(row.amt25)}</td>
+      <td style="text-align:center">${yoyTag(row.amt_yoy)}</td>
+      <td style="text-align:right;border-left:2px solid #dde1f0">${fmtM2(row.in_amt26)}</td>
+      <td style="text-align:right;color:#6b7591">${fmtM2(row.in_amt25)}</td>
+      <td style="text-align:center">${yoyTag(row.in_amt_yoy)}</td>
+      <td style="text-align:right;border-left:2px solid #dde1f0">${fmtC(row.wk_qty26)}</td>
+      <td style="text-align:right;color:#6b7591">${fmtC(row.wk_qty25)}</td>
+      <td style="text-align:center">${yoyTag(row.wk_qty_yoy)}</td>
+      <td style="text-align:right;border-left:2px solid #dde1f0">${fmtM2(row.wk_amt26)}</td>
+      <td style="text-align:right;color:#6b7591">${fmtM2(row.wk_amt25)}</td>
+      <td style="text-align:center">${yoyTag(row.wk_amt_yoy)}</td>
+      <td style="text-align:center;border-left:2px solid #dde1f0">${yoyTag(row.wow)}</td>
+      <td style="text-align:right;font-weight:600;border-left:2px solid #dde1f0">${row.rate26.toFixed(1)}%</td>
+      <td style="text-align:right;color:#6b7591">${row.rate25.toFixed(1)}%</td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.querySelectorAll('#catBody .ctog').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx);
+      if (catCollapsed.has(idx)) catCollapsed.delete(idx);
+      else catCollapsed.add(idx);
+      buildCatTable();
+    });
+  });
+}
+
+buildCatTable();
+</script>
+</body>
+</html>
